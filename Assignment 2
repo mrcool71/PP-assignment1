@@ -1,0 +1,176 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.patches import Polygon
+import random
+
+def ray_tracing(x,y,poly):
+    n = len(poly)
+    inside = False
+    p2x = 0.0
+    p2y = 0.0
+    xints = 0.0
+    p1x,p1y = poly[0]
+    for i in range(n+1):
+        p2x,p2y = poly[i % n]
+        if y > min(p1y,p2y):
+            if y <= max(p1y,p2y):
+                if x <= max(p1x,p2x):
+                    if p1y != p2y:
+                        xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x,p1y = p2x,p2y
+
+    return inside
+class Treenode:
+    def __init__(self,locationX,locationY):
+        self.locationX=locationX
+        self.locationY=locationY
+        self.children=[]
+        self.parent=None
+
+class RRTAlgorithm:
+    def __init__(self,start,goal,numiteratons,stepsize):
+        self.randomTree= Treenode(start[0],start[1])
+        self.goal=Treenode(goal[0], goal[1])
+        self.nearestNode=None
+        self.iterations=min(numiteratons,200)
+        
+        self.rho=stepsize
+        self.nearestdistance=10000
+        self.path_distance= 0
+        self.numwaypoints=0
+        self.waypoints=[]
+
+    def addchild(self,locationX,locationY):
+        if (locationX==self.goal.locationX):
+            self.nearestNode.children.append(self.goal)
+            self.goal.parent=self.nearestNode
+        else: 
+            tempnode=Treenode(locationX, locationY)
+            self.nearestNode.children.append(tempnode)
+            tempnode.parent=self.nearestNode
+           
+
+    def sampleAPoint(self):
+        x=random.randint(1,101)
+        y=random.randint(1,101)
+        point =np.array([x,y])
+        return point
+        
+
+    def steerToPoint(self,locationStart,locationEnd):
+        offset=self.rho*self.unitVector(locationStart, locationEnd)
+        point=np.array([locationStart.locationX+offset[0],locationStart.locationY+offset[1]])
+        if point[0]>=100:
+           point[0]=100
+        if point[1]>=100:
+           point[1]=100  
+        
+        return point  
+        
+
+    def isInObstacle(self,locationStart,locationEnd):
+        u_hat = self.unitVector(locationStart, locationEnd)
+        testPoint=np.array([0.0,0.0])
+        for i in range(self.rho):
+            testPoint[0]=locationStart.locationX+i*u_hat[0]
+            testPoint[1]=locationStart.locationY+i*u_hat[1]
+            if ray_tracing(testPoint[0], testPoint[1], polygon1_vertices)==True:
+                return True
+        return False
+
+
+        
+
+    def unitVector (self,locationStart,locationEnd):
+        v=np.array([locationEnd[0]-locationStart.locationX,locationEnd[1]-locationStart.locationY])
+        u_hat=v/np.linalg.norm(v)
+        return u_hat
+
+    def findNearest (self,root,point):
+        if not root:
+            return
+        dist=self.distance(root,point)
+        if dist<= self.nearestdistance:
+            self.nearestNode=root
+            self.nearestdistance=dist
+        for child in root.children:
+            self.findNearest(child, point)
+            pass        
+
+    def distance(self, node1,point):
+        dist=np.sqrt((node1.locationX-point[0])**2+(node1.locationY-point[1])**2)
+        return dist
+
+    def goalFound (self,point):
+        if self.distance(self.goal, point)<=self.rho:
+            return True
+        pass
+    def resetNearestValues(self):
+        self.nearestNode=None
+        self.nearestdistance=10000
+
+    def retracePath(self,goal):
+        if goal.locationX==self.randomTree.locationX:
+            return
+        self.numwaypoints+=1
+        currentPoint=np.array([goal.locationX,goal.locationY])
+        self.waypoints.insert(0, currentPoint)
+        self.path_distance+=self.rho
+        self.retracePath(self.goal.parent)
+polygon1_vertices=[(20,0),(20,75),(38,48),(43,14),(53,0)]
+x2=np.arange(0,110,10)
+y2=np.arange(0,110,20)
+polygon1=Polygon([(20,0),(20,75),(38,48),(43,14),(53,0)],facecolor='black')
+fig, ax = plt.subplots(1)
+ax.set_aspect('equal')
+
+
+ 
+
+
+start=[0,0]
+goal=np.array([100,100])
+numiteratons=200
+stepsize=5
+goalRegion=plt.Circle((100,100),stepsize,color='black',fill=False)
+plt.plot(0,0,'ro')
+plt.plot(100,100,'go')
+ax.add_patch(goalRegion)
+ax.add_patch(polygon1)
+
+
+
+plt.yticks(x2)
+plt.xticks(x2)
+plt.show()
+
+rrt=RRTAlgorithm(start, goal, numiteratons, stepsize)
+
+for i in range(rrt.iterations):
+    rrt.resetNearestValues()
+    print("Iteration: ",i)
+    point=rrt.sampleAPoint()
+    rrt.findNearest(rrt.randomTree, point)
+    new=rrt.steerToPoint(rrt.nearestNode, point)
+    bool= rrt.isInObstacle(rrt.nearestNode, new)
+    if (bool==False):
+        rrt.addchild(new[0], new[1])
+        plt.pause(0.10)
+        plt.plot([rrt.nearestNode.locationX,new[0]],[rrt.nearestNode.locationY,new[1]],'go',linestyle="--")
+        if (rrt.goalFound(new)):
+            rrt.addchild(goal[0], goal[1])
+            print("Goal found")
+            break
+
+rrt.retracePath(rrt.goal)
+rrt.waypoints.insert(0, start)
+print("Number of waypoints are ",rrt.numwaypoints)
+print("Path Distance is ",rrt.path_distance)
+print ("waypoints are ",rrt.waypoints )
+
+for i in range(len(rrt.waypoints)-1):
+    plt.plot([rrt.waypoints[i],[0],rrt.waypoints[i+1],[0]],[rrt.waypoints[i][1],rrt.waypoints[i+1],[1]],'ro',linestyle='--')
+    plt.pause(0.10)
